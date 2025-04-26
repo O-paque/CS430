@@ -6,7 +6,7 @@ from flask import Flask, session, request, render_template, redirect, url_for
 
 # START-STUDENT-CODE
 # Define the DSN for the ODBC connection to your PostgreSQL database.
-DSN = ""
+DSN = "DRIVER=PostgreSQL;SERVER=faure.cs.colostate.edu;PORT=5432;DATABASE=tyseef;UID=tyseef;PWD=836274587"
 # END-STUDENT-CODE
 
 app = Flask(__name__)
@@ -45,6 +45,24 @@ def get_employees():
     # 3. Close the connection and return the result.
 
     employees = []
+    
+    cnxn = pyodbc.connect(DSN)
+    cursor = cnxn.cursor()
+    cursor.execute('''
+                   SELECT e.ssn, e.name, e.address, e.phone, e.salary,
+                   CASE
+                        WHEN m.ssn IS NOT NULL THEN 'Manager'
+                        WHEN t.ssn IS NOT NULL THEN 'Technician'
+                        WHEN a.ssn IS NOT NULL THEN 'ATC'
+                        ELSE ''
+                    END AS role
+                    FROM airport.employee e
+                    LEFT JOIN airport.manager m ON e.ssn = m.ssn
+                    LEFT JOIN airport.technician t ON e.ssn = t.ssn
+                    LEFT JOIN airport.atc a ON e.ssn = a.ssn;
+                   ''')
+    employees = cursor.fetchall()
+    cnxn.close()
 
     # END-STUDENT-CODE
     return employees
@@ -57,6 +75,12 @@ def get_airplane_models():
     # 3. Close the connection
 
     models = []
+    
+    cnxn = pyodbc.connect(DSN)
+    cursor = cnxn.cursor()
+    cursor.execute("SELECT * FROM airport.airplane_model")
+    models = cursor.fetchall()
+    cnxn.close()
 
     # END-STUDENT-CODE
     return models
@@ -69,6 +93,12 @@ def get_airplanes():
     # 3. Close the connection
 
     airplanes = []
+    
+    cnxn = pyodbc.connect(DSN)
+    cursor = cnxn.cursor()
+    cursor.execute("SELECT * FROM airport.airplane")
+    airplanes = cursor.fetchall()
+    cnxn.close()
 
     # END-STUDENT-CODE
     return airplanes
@@ -81,6 +111,12 @@ def get_faa_tests():
     # 3. Close the connection
 
     faa_tests = []
+    
+    cnxn = pyodbc.connect(DSN)
+    cursor = cnxn.cursor()
+    cursor.execute("SELECT * FROM airport.faa_test")
+    faa_tests = cursor.fetchall()
+    cnxn.close()
 
     # END-STUDENT-CODE
     return faa_tests
@@ -93,6 +129,12 @@ def get_airworthiness_tests():
     # 3. Close the connection
 
     tests = []
+    
+    cnxn = pyodbc.connect(DSN)
+    cursor = cnxn.cursor()
+    cursor.execute("SELECT * FROM airport.test_event") # Need to verify
+    tests = cursor.fetchall()
+    cnxn.close()
 
     # END-STUDENT-CODE
     return tests
@@ -130,7 +172,7 @@ def login():
             session['username'] = username
             return redirect(url_for('index'))
         else:
-            return render_template('login.html', message="Authentication error!")
+            return render_template('login.html', message="Authentication error! Verify password is: " + hash_password(password) + " == " + user[0])
 
     return render_template('login.html')
 
@@ -164,6 +206,7 @@ def employee_add():
         # 2. Check if this SSN already exists
         # 3. If not, insert into employee and handle specialization
         # 4. Close connection
+        
 
         # END-STUDENT-CODE
 
@@ -195,6 +238,7 @@ def employee_update():
         # 3. If exists, update non-empty fields
         # 4. Handle specialization
         # 5. Close connection
+        
 
         # END-STUDENT-CODE
 
@@ -216,7 +260,6 @@ def employee_delete():
         # 2. Delete the employee's specializations
         # 3. Delete from employee
         # 4. Close connection
-
         # END-STUDENT-CODE
 
         return redirect(url_for('employee_delete'))
@@ -268,6 +311,11 @@ def update_salaries():
             # 1. Connect to DB
             # 2. Increase salary by 'percentage' for all employees
             # 3. Close connection
+            
+            cnxn = pyodbc.connect(DSN)
+            cursor = cnxn.cursor()
+            cursor.execute()
+            cnxn.close()
 
             # END-STUDENT-CODE
 
@@ -288,6 +336,11 @@ def model_add():
         # 1. Connect to DB
         # 2. Insert new airplane model if it does not exist
         # 3. Close connection
+        
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
+        cursor.execute()
+        cnxn.close()
 
         # END-STUDENT-CODE
 
@@ -309,6 +362,11 @@ def model_update():
         # 1. Connect to DB
         # 2. If model exists, update non-empty fields
         # 3. Close connection
+        
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
+        cursor.execute()
+        cnxn.close()
 
         # END-STUDENT-CODE
 
@@ -325,7 +383,12 @@ def model_delete():
         # 1. Connect to DB
         # 2. Delete the model if it exists
         # 3. Close connection
-
+        
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
+        cursor.execute()
+        cnxn.close()
+        
         # END-STUDENT-CODE
 
     return render_template('models.html', models=get_airplane_models(), action="Delete")
