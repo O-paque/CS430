@@ -7,9 +7,9 @@ import java.security.MessageDigest;
 public class AirplaneTestApp {
     // START-STUDENT-CODE
     // Set the database connection URL and credentials
-    private static final String DB_URL = "";
-    private static final String DB_USER = "";
-    private static final String DB_PASSWORD = "";
+    private static final String DB_URL = "jdbc:postgresql://faure:5432/tyseef?currentSchema=airport";
+    private static final String DB_USER = "tyseef";
+    private static final String DB_PASSWORD = "836274587";
     // END-STUDENT-CODE
 
     private JFrame loginFrame, testEventFrame;
@@ -130,7 +130,9 @@ public class AirplaneTestApp {
         // START-STUDENT-CODE
         // Write the query used to populate airplaneDropdown with the
         // registration numbers from the "airplane" table.
-        populateDropdown(airplaneDropdown, "");
+        populateDropdown(airplaneDropdown, "SELECT a.reg_number " + 
+                                            "FROM airport.airplane a " +
+                                            "ORDER BY reg_number");
         // END-STUDENT-CODE
 
         row1.add(airplaneDropdown);
@@ -145,7 +147,9 @@ public class AirplaneTestApp {
         // START-STUDENT-CODE
         // Write the query to populate testDropdown with the test_number from
         // "faa_test" table.
-        populateDropdown(testDropdown, "");
+        populateDropdown(testDropdown, "SELECT f.test_number " +
+                                        "FROM airport.faa_test f " +
+                                        "ORDER BY test_number");
         // END-STUDENT-CODE
 
         row2.add(testDropdown);
@@ -227,7 +231,9 @@ public class AirplaneTestApp {
             // START-STUDENT-CODE
             // Build the logic to insert a new test event into the "test_event"
             // table.
-            String sql = "";
+            String sql = "INSERT INTO airport.test_event " +
+                         "(test_number, ssn, reg_number, date, duration, score) " +
+                         "VALUES (?, ?, ?, CURRENT_DATE, make_interval(hours := ?, mins := ?, secs := ?), ?)";
             // END-STUDENT-CODE
 
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);

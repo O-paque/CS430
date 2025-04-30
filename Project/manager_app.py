@@ -172,7 +172,7 @@ def login():
             session['username'] = username
             return redirect(url_for('index'))
         else:
-            return render_template('login.html', message="Authentication error! Verify password is: " + hash_password(password) + " == " + user[0])
+            return render_template('login.html', message="Authentication error!")
 
     return render_template('login.html')
 
@@ -207,7 +207,39 @@ def employee_add():
         # 3. If not, insert into employee and handle specialization
         # 4. Close connection
         
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO airport.employee (ssn, name, password, address, phone, salary)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (ssn) DO NOTHING;
+            ''', (ssn, name, password_hashed, address, phone, salary))
 
+            if specialization == 'manager':
+                cursor.execute('''
+                    INSERT INTO airport.manager (ssn)
+                    VALUES (?)
+                    ON CONFLICT DO NOTHING;
+                ''', (ssn,))
+            elif specialization == 'technician':
+                cursor.execute('''
+                    INSERT INTO airport.technician (ssn)
+                    VALUES (?)
+                    ON CONFLICT DO NOTHING;
+                ''', (ssn,))
+            elif specialization == 'atc':
+                cursor.execute('''
+                    INSERT INTO airport.atc (ssn)
+                    VALUES (?)
+                    ON CONFLICT DO NOTHING;
+                ''', (ssn,))
+            cnxn.commit()
+        except Exception as e:
+            cnxn.rollback()
+            return render_template('employees.html', message="Transaction failed: " + e)
+
+        cnxn.close()
         # END-STUDENT-CODE
 
         return redirect(url_for('employee_add'))
@@ -238,7 +270,67 @@ def employee_update():
         # 3. If exists, update non-empty fields
         # 4. Handle specialization
         # 5. Close connection
+
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
         
+        fields = []
+        values = []
+        
+        if name:
+            fields.append('name = ?')
+            values.append(name)
+
+        if password_hashed:
+            fields.append('password = ?')
+            values.append(password_hashed)
+
+        if address:
+            fields.append('address = ?')
+            values.append(address)
+
+        if phone:
+            fields.append('phone = ?')
+            values.append(phone)
+
+        if salary is not None:
+            fields.append('salary = ?')
+            values.append(salary)
+
+        if specialization:
+            cursor.execute('DELETE FROM airport.manager WHERE ssn = ?', (ssn,))
+            cursor.execute('DELETE FROM airport.technician WHERE ssn = ?', (ssn,))
+            cursor.execute('DELETE FROM airport.atc WHERE ssn = ?', (ssn,))
+
+            if specialization == 'manager':
+                cursor.execute('''
+                    INSERT INTO airport.manager (ssn)
+                    VALUES (?)
+                ''', (ssn,))
+            elif specialization == 'technician':
+                cursor.execute('''
+                    INSERT INTO airport.technician (ssn)
+                    VALUES (?)
+                ''', (ssn,))
+            elif specialization == 'atc':
+                cursor.execute('''
+                    INSERT INTO airport.atc (ssn)
+                    VALUES (?)
+                ''', (ssn,))
+
+        if fields: 
+
+            query = f'''
+                    UPDATE airport.employee
+                    SET {', '.join(fields)}
+                    WHERE ssn = ?;
+            '''
+            values.append(ssn)
+
+            cursor.execute(query, values)
+        
+        cnxn.commit()
+        cnxn.close()
 
         # END-STUDENT-CODE
 
@@ -260,6 +352,19 @@ def employee_delete():
         # 2. Delete the employee's specializations
         # 3. Delete from employee
         # 4. Close connection
+
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
+
+        cursor.execute('DELETE FROM airport.manager WHERE ssn = ?', (ssn,))
+        cursor.execute('DELETE FROM airport.technician WHERE ssn = ?', (ssn,))
+        cursor.execute('DELETE FROM airport.atc WHERE ssn = ?', (ssn,))
+        cursor.execute('DELETE FROM airport.expert WHERE ssn = ?', (ssn,))
+        cursor.execute('DELETE FROM airport.employee WHERE ssn = ?', (ssn,))
+
+
+        cnxn.commit()
+        cnxn.close()
         # END-STUDENT-CODE
 
         return redirect(url_for('employee_delete'))
@@ -276,17 +381,39 @@ def expertise():
     # 3. Retrieve technicians + models for dropdowns
     # 4. Close connection
 
+    cnxn = pyodbc.connect(DSN)
+    cursor = cnxn.cursor()
+
     if request.method == 'POST':
         ssn = request.form['ssn'].strip()
         model_number = request.form['model_number'].strip()
         action = request.form['action']
 
-        if action == "add":
-            ...
-        elif action == "remove":
-            ...
+        values = [ssn, model_number]
 
-    technicians = []
+        if action == "add":
+            query = '''
+                    INSERT INTO airport.expert (ssn, model_number)
+                    VALUES (?, ?)
+                    ON CONFLICT DO NOTHING;
+            '''
+        elif action == "remove":
+            query = '''
+                    DELETE FROM airport.expert
+                    WHERE ssn = ? AND model_number = ?;
+            '''
+
+        cursor.execute(query, values)
+
+    cursor.execute('''
+        SELECT e.ssn, e.name, COALESCE(ex.model_number, '')
+        FROM airport.employee e
+        INNER JOIN airport.technician t ON e.ssn = t.ssn
+        LEFT JOIN airport.expert ex ON e.ssn = ex.ssn
+        ORDER BY e.name, ex.model_number;
+    ''')
+
+    technicians = cursor.fetchall()
 
     formatted_technicians = [
         (tech[0], tech[1], tech[2] if tech[2] is not None else '') for tech in technicians
@@ -294,6 +421,15 @@ def expertise():
 
     models = []
 
+    cursor.execute('''
+        SELECT model_number FROM airport.airplane_model
+        ORDER BY model_number;
+    ''')
+
+    models = cursor.fetchall()
+
+    cnxn.commit()
+    cnxn.close()
     # END-STUDENT-CODE
 
     return render_template('expertise.html', technicians=formatted_technicians, models=models)
@@ -312,9 +448,17 @@ def update_salaries():
             # 2. Increase salary by 'percentage' for all employees
             # 3. Close connection
             
+            percentage += 1
+
             cnxn = pyodbc.connect(DSN)
             cursor = cnxn.cursor()
-            cursor.execute()
+
+            cursor.execute('''
+                UPDATE airport.employee
+                SET salary = salary * ?
+            ''',(percentage,))
+
+            cnxn.commit()
             cnxn.close()
 
             # END-STUDENT-CODE
@@ -339,7 +483,14 @@ def model_add():
         
         cnxn = pyodbc.connect(DSN)
         cursor = cnxn.cursor()
-        cursor.execute()
+
+        cursor.execute('''
+            INSERT INTO airport.airplane_model (model_number, capacity, weight)
+            VALUES (?, ?, ?)
+            ON CONFLICT (model_number) DO NOTHING;
+        ''', (model_number, capacity, weight))
+
+        cnxn.commit()
         cnxn.close()
 
         # END-STUDENT-CODE
@@ -362,10 +513,33 @@ def model_update():
         # 1. Connect to DB
         # 2. If model exists, update non-empty fields
         # 3. Close connection
+
+        fields = []
+        values = []
         
         cnxn = pyodbc.connect(DSN)
         cursor = cnxn.cursor()
-        cursor.execute()
+
+        if capacity:
+            fields.append('capacity = ?')
+            values.append(capacity)
+        
+        if weight:
+            fields.append('weight = ?')
+            values.append(weight)
+
+        if fields: 
+
+            query = f'''
+                    UPDATE airport.airplane_model
+                    SET {', '.join(fields)}
+                    WHERE model_number = ?;
+            '''
+            values.append(model_number)
+
+            cursor.execute(query, values)
+
+        cnxn.commit()
         cnxn.close()
 
         # END-STUDENT-CODE
@@ -386,7 +560,12 @@ def model_delete():
         
         cnxn = pyodbc.connect(DSN)
         cursor = cnxn.cursor()
-        cursor.execute()
+
+        cursor.execute('DELETE FROM airport.airplane WHERE model_number = ?', (model_number,))
+        cursor.execute('DELETE FROM airport.expert WHERE model_number = ?', (model_number,))
+        cursor.execute('DELETE FROM airport.airplane_model WHERE model_number = ?', (model_number,))
+
+        cnxn.commit()
         cnxn.close()
         
         # END-STUDENT-CODE
@@ -403,11 +582,33 @@ def airplane_add():
     # 3. Retrieve list of airplane_model for dropdown
     # 3. Close connection
 
+    cnxn = pyodbc.connect(DSN)
+    cursor = cnxn.cursor()
+
     if request.method == 'POST':
         reg_number = request.form['reg_number'].strip()
         model_number = request.form['model_number'].strip()
 
+        
+
+        cursor.execute('''
+            INSERT INTO airport.airplane (reg_number, model_number)
+            VALUES (?, ?)
+            ON CONFLICT (reg_number) DO NOTHING;
+        ''', (reg_number, model_number))
+
+
     models = []
+
+    cursor.execute('''
+        SELECT model_number FROM airport.airplane_model
+        ORDER BY model_number;
+    ''')
+
+    models = cursor.fetchall()
+
+    cnxn.commit()
+    cnxn.close()
 
     # END-STUDENT-CODE
 
@@ -423,11 +624,30 @@ def airplane_update():
     # 3. Retrieve list of airplane_model for dropdown
     # 4. Close connection
 
+    cnxn = pyodbc.connect(DSN)
+    cursor = cnxn.cursor()
+
     if request.method == 'POST':
         reg_number = request.form['reg_number'].strip()
         model_number = request.form['model_number'].strip()
 
+        cursor.execute('''
+            UPDATE airport.airplane
+            SET model_number = ?
+            WHERE reg_number = ?
+        ''', (model_number, reg_number))
+
     models = []
+
+    cursor.execute('''
+        SELECT model_number FROM airport.airplane_model
+        ORDER BY model_number;
+    ''')
+
+    models = cursor.fetchall()
+
+    cnxn.commit()
+    cnxn.close()
 
     # END-STUDENT-CODE
 
@@ -444,10 +664,29 @@ def airplane_delete():
 
     if request.method == 'POST':
         reg_number = request.form['reg_number'].strip()
+        model_number = request.form['model_number'].strip()
+        
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
+
+        cursor.execute('DELETE FROM airport.test_event WHERE reg_number = ?', (reg_number,))
+        cursor.execute('DELETE FROM airport.airplane WHERE reg_number = ? AND model_number = ?', (reg_number, model_number))
+        
+        models = []
+
+        cursor.execute('''
+            SELECT model_number FROM airport.airplane_model
+            ORDER BY model_number;
+        ''')
+
+        models = cursor.fetchall()
+
+        cnxn.commit()
+        cnxn.close()
 
     # END-STUDENT-CODE
 
-    return render_template('airplanes.html', airplanes=get_airplanes(), action="Delete")
+    return render_template('airplanes.html', airplanes=get_airplanes(), models=get_airplane_models(), action="Delete")
 
 
 @app.route('/faa_tests/add', methods=['GET', 'POST'])
@@ -462,6 +701,18 @@ def faa_test_add():
         test_number = request.form['test_number'].strip()
         name = request.form['name'].strip()
         max_score = parse_float(request.form['max_score'].strip())
+        
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
+
+        cursor.execute('''
+            INSERT INTO airport.faa_test (test_number, name, max_score)
+            VALUES (?, ?, ?)
+            ON CONFLICT (test_number) DO NOTHING;
+        ''', (test_number, name, max_score))
+
+        cnxn.commit()
+        cnxn.close()
 
     # END-STUDENT-CODE
 
@@ -481,6 +732,34 @@ def faa_test_update():
         name = request.form['name'].strip() or None
         max_score = request.form['max_score'].strip() or None
         max_score = parse_float(max_score) if max_score else None
+        
+        fields = []
+        values = []
+        
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
+
+        if name:
+            fields.append('name = ?')
+            values.append(name)
+            
+        if max_score:
+            fields.append('max_score = ?')
+            values.append(max_score)
+            
+        if fields: 
+
+            query = f'''
+                    UPDATE airport.faa_test
+                    SET {', '.join(fields)}
+                    WHERE test_number = ?;
+            '''
+            values.append(test_number)
+
+            cursor.execute(query, values)
+
+        cnxn.commit()
+        cnxn.close()
 
     # END-STUDENT-CODE
 
@@ -497,6 +776,15 @@ def faa_test_delete():
 
     if request.method == 'POST':
         test_number = request.form['test_number'].strip()
+        
+        cnxn = pyodbc.connect(DSN)
+        cursor = cnxn.cursor()
+
+        cursor.execute('DELETE FROM airport.test_event WHERE test_number = ?', (test_number,))
+        cursor.execute('DELETE FROM airport.faa_test WHERE test_number = ?', (test_number))
+
+        cnxn.commit()
+        cnxn.close()
 
     # END-STUDENT-CODE
 
